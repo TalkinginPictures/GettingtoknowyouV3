@@ -2,210 +2,176 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-  <title>Meet and Greet Quiz</title>
+  <title>Getting to Know You Quiz</title>
   <style>
     body {
-      font-family: Arial, sans-serif;
-      max-width: 800px;
-      margin: auto;
+      font-family: sans-serif;
       padding: 20px;
     }
-    .question {
-      font-size: 1.2em;
-      margin-bottom: 10px;
+    #quiz-container {
+      max-width: 600px;
+      margin: 0 auto;
+      text-align: center;
     }
-    .option-container {
+    .options {
       display: flex;
       flex-wrap: wrap;
-      gap: 10px;
-      margin-bottom: 20px;
+      justify-content: center;
+      gap: 15px;
+      margin-top: 20px;
     }
     .option {
-      border: 2px solid #ccc;
-      padding: 10px;
       cursor: pointer;
-      text-align: center;
-      width: 120px;
-    }
-    .option.selected {
-      border-color: green;
-      background-color: #eaffea;
+      border: 2px solid transparent;
+      border-radius: 10px;
+      padding: 10px;
+      width: 150px;
     }
     .option img {
-      width: 60px;
-      height: 60px;
+      width: 100px;
+      height: 100px;
     }
-    #nextBtn {
+    .option.selected {
+      border-color: #4caf50;
+      background-color: #eaffea;
+    }
+    button {
+      margin-top: 30px;
       padding: 10px 20px;
-      font-size: 1em;
+      font-size: 16px;
     }
     #summary {
-      display: none;
-    }
-    #printBtn {
-      margin-top: 10px;
+      text-align: left;
     }
   </style>
 </head>
 <body>
-  <h1>Welcome to the Quiz</h1>
-  <div id="quizContainer">
-    <div class="question" id="questionText"></div>
-    <div id="optionContainer" class="option-container"></div>
-    <input type="text" id="nameInput" style="display:none" placeholder="Type your name here" />
-    <button id="nextBtn" disabled>Next</button>
-    <div id="feedback"></div>
+  <div id="quiz-container">
+    <h2 id="question-text">Welcome to the Quiz</h2>
+    <input type="text" id="name-input" placeholder="Enter your name" style="display:none; margin-top: 20px;" />
+    <div class="options" id="options-container"></div>
+    <p id="feedback-text"></p>
+    <button id="next-button">Start</button>
   </div>
 
-  <div id="summary">
-    <h2>Thank you, <span id="studentName"></span>! You’ve finished the quiz.</h2>
-    <ul id="summaryList"></ul>
-    <button id="printBtn">Print Results</button>
-  </div>
-
-  <!-- Firebase SDK -->
-  <script type="module">
-    import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
-    import { getFirestore, doc, setDoc } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
-
-    const firebaseConfig = {
-      apiKey: "YOUR_API_KEY",
-      authDomain: "YOUR_PROJECT.firebaseapp.com",
-      projectId: "YOUR_PROJECT_ID",
-      storageBucket: "YOUR_PROJECT.appspot.com",
-      messagingSenderId: "YOUR_SENDER_ID",
-      appId: "YOUR_APP_ID"
-    };
-
-    const app = initializeApp(firebaseConfig);
-    const db = getFirestore(app);
-
+  <script>
     const quiz = [
-      { type: 'text', question: "What is your name?" },
+      { question: "What is your name?", type: "text" },
       {
-        type: 'choice',
         question: "What is your favourite colour?",
-        options: ["red", "blue", "green", "yellow", "purple", "orange"]
+        options: ["red", "blue", "green", "yellow", "purple", "orange"],
+        type: "choice"
       },
       {
-        type: 'choice',
         question: "What do you like to do?",
-        options: ["draw", "run", "sing", "read", "play", "dance"]
+        options: ["draw", "read", "play", "watch TV", "run", "swim"],
+        type: "choice"
       },
       {
-        type: 'choice',
-        question: "What is your favourite food?",
-        options: ["pizza", "chicken", "rice", "salad", "burger", "fruit"]
+        question: "What food do you like?",
+        options: ["pizza", "pasta", "rice", "chicken", "apple", "cake"],
+        type: "choice"
       },
       {
-        type: 'choice',
-        question: "How do you feel today?",
-        options: ["happy", "sad", "excited", "tired", "nervous", "calm"]
+        question: "How are you feeling today?",
+        options: ["happy", "sad", "excited", "tired", "angry", "calm"],
+        type: "choice"
       }
     ];
 
-    let currentIndex = 0;
+    let currentQuestion = 0;
+    let userAnswers = {};
     let studentName = "";
-    let answers = [];
 
-    const questionText = document.getElementById("questionText");
-    const optionContainer = document.getElementById("optionContainer");
-    const nameInput = document.getElementById("nameInput");
-    const nextBtn = document.getElementById("nextBtn");
-    const feedback = document.getElementById("feedback");
-    const summary = document.getElementById("summary");
-    const summaryList = document.getElementById("summaryList");
-    const studentNameSpan = document.getElementById("studentName");
+    const questionText = document.getElementById("question-text");
+    const optionsContainer = document.getElementById("options-container");
+    const nameInput = document.getElementById("name-input");
+    const nextButton = document.getElementById("next-button");
+    const feedbackText = document.getElementById("feedback-text");
 
-    function renderQuestion() {
-      const q = quiz[currentIndex];
-      feedback.textContent = "";
-      nextBtn.disabled = true;
-      optionContainer.innerHTML = "";
+    async function fetchARASAAC(word) {
+      const response = await fetch(`https://api.arasaac.org/api/pictograms/en/search/${word}`);
+      const data = await response.json();
+      if (data.length > 0) {
+        return `https://static.arasaac.org/pictograms/${data[0]._id}/${data[0]._id}_300.png`;
+      }
+      return null;
+    }
 
-      if (q.type === "text") {
+    async function showQuestion() {
+      const q = quiz[currentQuestion];
+      feedbackText.textContent = "";
+      optionsContainer.innerHTML = "";
+      nextButton.disabled = true;
+
+      if (currentQuestion === 0) {
         questionText.textContent = q.question;
-        nameInput.style.display = "block";
-        nameInput.value = "";
-        nameInput.focus();
+        nameInput.style.display = "inline-block";
+        nextButton.textContent = "Next";
+        nextButton.disabled = false;
       } else {
-        questionText.textContent = `${studentName}, ${q.question}`;
         nameInput.style.display = "none";
-        q.options.forEach(opt => {
-          fetch(`https://api.arasaac.org/api/pictograms/en/${opt}`)
-            .then(res => res.ok ? res.json() : Promise.reject())
-            .then(data => {
-              const div = document.createElement("div");
-              div.className = "option";
-              div.innerHTML = `<img src="https://static.arasaac.org/pictograms/${data._id}/${data._id}_300.png"/><div>${opt}</div>`;
-              div.onclick = () => selectOption(opt, div);
-              optionContainer.appendChild(div);
-            })
-            .catch(() => {
-              const div = document.createElement("div");
-              div.className = "option";
-              div.innerHTML = `<div style="font-size:40px;">❓</div><div>${opt}</div>`;
-              div.onclick = () => selectOption(opt, div);
-              optionContainer.appendChild(div);
-            });
+        questionText.textContent = q.question;
+        const promises = q.options.map(async (option) => {
+          const imgUrl = await fetchARASAAC(option);
+          return { word: option, img: imgUrl };
         });
+
+        const symbols = await Promise.all(promises);
+
+        symbols.forEach((item) => {
+          const div = document.createElement("div");
+          div.className = "option";
+          div.innerHTML = item.img
+            ? `<img src="${item.img}" alt="${item.word}" /><p>${item.word}</p>`
+            : `<p>${item.word}</p>`;
+          div.onclick = () => {
+            document.querySelectorAll(".option").forEach(el => el.classList.remove("selected"));
+            div.classList.add("selected");
+            userAnswers[q.question] = item.word;
+            feedbackText.textContent = `Great, ${studentName}! Your answer is: ${item.word}`;
+            nextButton.disabled = false;
+          };
+          optionsContainer.appendChild(div);
+        });
+
+        nextButton.textContent = currentQuestion === quiz.length - 1 ? "Finish" : "Next";
       }
     }
 
-    function selectOption(opt, element) {
-      Array.from(document.getElementsByClassName("option")).forEach(el => el.classList.remove("selected"));
-      element.classList.add("selected");
-      answers[currentIndex] = opt;
-      feedback.textContent = `Great, ${studentName}! Your answer: "${opt}"`;
-      nextBtn.disabled = false;
-    }
-
-    nextBtn.onclick = () => {
-      const q = quiz[currentIndex];
-
-      if (q.type === "text") {
-        const name = nameInput.value.trim();
-        if (name) {
-          studentName = name;
-          answers.push(name);
-          feedback.textContent = `Hello, ${studentName}! Let's get started.`;
-          nextBtn.disabled = false;
-        } else {
-          feedback.textContent = "Please enter a name.";
-          return;
-        }
+    nextButton.onclick = () => {
+      if (currentQuestion === 0) {
+        studentName = nameInput.value.trim() || "Friend";
+        userAnswers["Name"] = studentName;
+        feedbackText.textContent = `Hello, ${studentName}! Let’s begin the quiz.`;
       }
 
-      currentIndex++;
-      if (currentIndex < quiz.length) {
-        renderQuestion();
+      currentQuestion++;
+
+      if (currentQuestion < quiz.length) {
+        showQuestion();
       } else {
         showSummary();
       }
-      nextBtn.disabled = true;
     };
 
     function showSummary() {
-      document.getElementById("quizContainer").style.display = "none";
-      summary.style.display = "block";
-      studentNameSpan.textContent = studentName;
-      summaryList.innerHTML = quiz.map((q, i) => `<li><strong>${q.question}</strong>: ${answers[i]}</li>`).join("");
+      questionText.textContent = `Thank you, ${studentName}! You’ve finished the quiz.`;
+      optionsContainer.innerHTML = "";
+      nameInput.style.display = "none";
+      feedbackText.textContent = "";
+      nextButton.style.display = "none";
 
-      const data = quiz.reduce((obj, q, i) => {
-        obj[q.question] = answers[i];
-        return obj;
-      }, {});
-
-      const docRef = doc(db, "meet_and_greet", studentName);
-      setDoc(docRef, data).then(() => console.log("Saved to Firebase"));
+      const summary = document.createElement("div");
+      summary.id = "summary";
+      summary.innerHTML = "<h3>Your Answers:</h3><ul>" +
+        Object.entries(userAnswers).map(([q, a]) => `<li><strong>${q}:</strong> ${a}</li>`).join("") +
+        "</ul>";
+      optionsContainer.appendChild(summary);
     }
 
-    document.getElementById("printBtn").onclick = () => {
-      window.print();
-    };
-
-    renderQuestion();
+    showQuestion();
   </script>
 </body>
 </html>
+
